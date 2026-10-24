@@ -28,8 +28,11 @@ export interface SelectProps {
 
 function Select({ value, onValueChange, options, placeholder, disabled, invalid, size = "default", className, contentClassName, id, ...aria }: SelectProps) {
   const items = options.map((o) => (typeof o === "string" ? { value: o, label: o || placeholder || "—" } : o));
+  // "" with no matching "" option means "nothing chosen": Radix shows the placeholder for value "".
+  const hasEmptyOption = items.some((it) => it.value === "");
+  const rootValue = value === "" && !hasEmptyOption ? "" : toRadix(value);
   return (
-    <SelectPrimitive.Root value={toRadix(value)} onValueChange={(v) => onValueChange(fromRadix(v))} disabled={disabled}>
+    <SelectPrimitive.Root value={rootValue} onValueChange={(v) => onValueChange(fromRadix(v))} disabled={disabled}>
       <SelectPrimitive.Trigger
         id={id}
         aria-label={aria["aria-label"]}
