@@ -1,5 +1,6 @@
 import type { SoapStore } from "@/lib/store";
 import { statusTextClass } from "@/components/shared/status-badge";
+import { buildCommercialReport, COMMERCIAL_REPORTS } from "./commercial-reports";
 
 /* Report builder — a straight port of the prototype's build(). Colours are expressed as token text classes. */
 
@@ -29,10 +30,12 @@ const C = (v: unknown, o?: CellOpts): Cell => ({ v: v == null ? "" : String(v), 
 const R = (v: unknown, o?: CellOpts): Cell => ({ ...C(v, o), align: "right" });
 const col = (label: string, align: Align = "left"): Col => ({ label, align });
 
-export function buildReport(key: string, S: SoapStore, whs: string[], from: string, to: string, brand: string, sku: string): ReportOut {
+export function buildReport(key: string, S: SoapStore, whs: string[], from: string, to: string, brand: string, sku: string, customer = ""): ReportOut {
   const s = S.s;
   const inD = (d?: string) => !!d && d.slice(0, 10) >= from && d.slice(0, 10) <= to;
   const pOk = (x: string) => (!brand || S.prod(x).brand === brand) && (!sku || x === sku);
+  const cOk = (c: string) => !customer || c === customer;
+  if (COMMERCIAL_REPORTS.includes(key)) return buildCommercialReport(key, S, whs, from, to, brand, sku, customer);
   const M = S.money;
   const out: ReportOut = { cols: [], rows: [], raw: [], summary: [] };
   const add = (cells: Cell[], raw?: (string | number)[]) => {
@@ -142,7 +145,7 @@ export function buildReport(key: string, S: SoapStore, whs: string[], from: stri
       );
   } else if (key === "sales") {
     out.cols = [col("Order"), col("Date"), col("Customer"), col("Warehouse"), col("Method"), col("Terms"), col("Status"), col("Order value", "right"), col("Supplied (bars)", "right")];
-    const os = s.salesOrders.filter((o) => whs.includes(o.wh) && inD(o.date) && o.lines.some((l) => pOk(l.sku)));
+    const os = s.salesOrders.filter((o) => whs.includes(o.wh) && inD(o.date) && cOk(o.customer) && o.lines.some((l) => pOk(l.sku)));
     os.forEach((o) =>
       add([C(o.id), C(S.fmtDate(o.date)), C(S.cust(o.customer).name), C(S.wh(o.wh).name), C(o.method), C(o.terms), C(o.status, { cls: statusTextClass(o.status) }), R(M(S.soTotal(o))), R(S.commas(o.lines.reduce((a, l) => a + l.fulfilled, 0)))]),
     );
@@ -162,10 +165,10 @@ export function buildReport(key: string, S: SoapStore, whs: string[], from: stri
   } else if (key === "receivables") {
     out.cols = [col("Customer"), col("Current", "right"), col("1–30 days", "right"), col("31–60 days", "right"), col("60+ days", "right"), col("Total outstanding", "right"), col("Credit limit", "right")];
     const tot = [0, 0, 0, 0];
-    s.customers.forEach((c) => {
+    s.customers.filter((c) => cOk(c.id)).forEach((c) => {
       const b = [0, 0, 0, 0];
       s.invoices
-        .filter((i) => i.customer === c.id && whs.includes(i.wh) && S.invBal(i) > 0)
+        .filter((i) => i.customer === c.id && whs.includes(i.wh) && i.status === "Issued" && S.invBal(i) > 0)
         .forEach((i) => {
           const od = S.diffDays(S.TODAY, i.due);
           const k = od <= 0 ? 0 : od <= 30 ? 1 : od <= 60 ? 2 : 3;
@@ -180,7 +183,7 @@ export function buildReport(key: string, S: SoapStore, whs: string[], from: stri
       { k: "Total receivables", v: M(tot.reduce((a, x) => a + x, 0)) },
       { k: "Current", v: M(tot[0]) },
       { k: "Overdue", v: M(tot[1] + tot[2] + tot[3]), tone: "danger" },
-      { k: "Unverified receipts", v: M(s.payments.filter((p) => p.status === "Recorded").reduce((a: number, p) => a + p.amount, 0)), s: "recorded, awaiting verification" },
+      { k: "Unverified receipts", v: M(s.payments.filter((p) => p.status === "Recorded" && cOk(p.customer)).reduce((a, p) => a + p.amount, 0)), s: "recorded, awaiting verification" },
     ];
   } else if (key === "payables") {
     out.cols = [col("Supplier"), col("Invoice"), col("PO"), col("Due"), col("Total", "right"), col("Paid", "right"), col("Balance", "right"), col("Match")];

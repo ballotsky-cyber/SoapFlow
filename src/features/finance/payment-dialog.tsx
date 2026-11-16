@@ -10,18 +10,22 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Alert, FileInput } from "@/components/ui/misc";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { CustomerPicker } from "@/features/sales/shared/customer-dialog";
 import { cn } from "@/lib/utils";
 import { toMinor } from "./money";
 
 export interface PayInit { customer: string; inv?: string }
 
-interface PayForm { customer: string; date: string; amount: string; method: string; extRef: string; notes: string; file: string; alloc: Record<string, string> }
+interface PayForm { customer: string; date: string; amount: string; method: string; extRef: string; receivedBy: string; notes: string; file: string; alloc: Record<string, string> }
 
-/** Record customer payment, with allocation across the customer's open invoices. */
-export function PaymentDialog({ init, onClose, onSaved }: { init: PayInit; onClose: () => void; onSaved: () => void }) {
+/** Record a customer payment (POST /api/payments), allocated across the customer's issued invoices. A receipt number is generated. */
+export function PaymentDialog({ init, onClose, onSaved }: { init: PayInit; onClose: () => void; onSaved: (paymentId: string) => void }) {
   const S = useSoap();
   const s = S.s;
-  const [p, setPState] = React.useState<PayForm>(() => ({ customer: init.customer, date: S.TODAY, amount: "", method: "Bank transfer", extRef: "", notes: "", file: "", alloc: init.inv ? { [init.inv]: "" } : {} }));
+  const [p, setPState] = React.useState<PayForm>(() => {
+    const inv = init.inv ? s.invoices.find((i) => i.id === init.inv) : undefined;
+    return { customer: init.customer, date: S.TODAY, amount: inv ? (S.invBal(inv) / 100).toFixed(2) : "", method: s.settings.paymentMethods.includes("Bank transfer") ? "Bank transfer" : s.settings.paymentMethods[0], extRef: "", receivedBy: s.currentUser, notes: "", file: "", alloc: inv ? { [inv.id]: (S.invBal(inv) / 100).toFixed(2) } : {} };
+  });
   const [errs, setErrs] = React.useState<Record<string, string>>({});
   const [err, setErr] = React.useState("");
   const setP = (patch: Partial<PayForm>) => {
@@ -31,9 +35,10 @@ export function PaymentDialog({ init, onClose, onSaved }: { init: PayInit; onClo
   };
 
   const amount = toMinor(p.amount);
-  const open = p.customer ? s.invoices.filter((x) => x.customer === p.customer && S.invBal(x) > 0).sort((a, b) => (a.date < b.date ? -1 : 1)) : [];
+  const open = p.customer ? s.invoices.filter((x) => x.customer === p.customer && x.status === "Issued" && S.invBal(x) > 0).sort((a, b) => (a.due < b.due ? -1 : 1)) : [];
   const allocMinor = Object.keys(p.alloc).reduce((a, k) => a + (toMinor(p.alloc[k]) || 0), 0);
   const unalloc = (amount || 0) - allocMinor;
+  const users = s.users.filter((u) => u.status === "Active").map((u) => ({ value: u.id, label: u.name }));
 
   const autoAlloc = () => {
     if (!(amount > 0)) return setErrs({ amount: "Enter the amount first." });
@@ -55,75 +60,81 @@ export function PaymentDialog({ init, onClose, onSaved }: { init: PayInit; onClo
       setErr("Please fix the highlighted fields.");
       return;
     }
+    const bad = Object.keys(p.alloc).find((k) => isNaN(toMinor(p.alloc[k])));
+    if (bad) {
+      setErrs({ alloc: "Enter a valid amount for " + bad + "." });
+      setErr("Please fix the highlighted fields.");
+      return;
+    }
     const alloc = Object.keys(p.alloc).map((k) => ({ inv: k, amount: toMinor(p.alloc[k]) || 0 })).filter((a) => a.amount > 0);
-    const r = S.paymentRecord({ customer: p.customer, date: p.date, amount, method: p.method, extRef: p.extRef.trim(), notes: p.notes, evidence: p.file, alloc });
+    const r = S.paymentRecord({ customer: p.customer, date: p.date, amount, method: p.method, extRef: p.extRef.trim(), receivedBy: p.receivedBy, notes: p.notes, evidence: p.file, alloc });
     if (!r.ok) {
       setErrs(r.errs || {});
       setErr(r.error);
       return;
     }
-    onSaved();
     S.result(r, "Payment recorded");
+    onSaved(r.ref as string);
   };
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent size="lg">
-        <DialogHeader title="Record customer payment" description={`Recorded by ${S.user().name} · status will be “Recorded” until verified against a bank or mobile-money statement`} />
+        <DialogHeader title="Record customer payment" description="A receipt number is generated · status stays “Recorded” until verified against a bank or mobile-money statement" />
         <DialogBody>
           {err && <Alert tone="danger">{err} Your entries have been kept.</Alert>}
           <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Customer" required error={errs.customer}>
-              <Select value={p.customer} onValueChange={(v) => setP({ customer: v, alloc: {} })} placeholder="Select…" invalid={!!errs.customer} options={s.customers.map((c) => ({ value: c.id, label: c.name }))} />
+            <Field label="Customer" required error={errs.customer} className="sm:col-span-2">
+              <CustomerPicker value={p.customer} onChange={(v) => setP({ customer: v, alloc: {} })} invalid={!!errs.customer} includeInactive />
             </Field>
-            <Field label="Date received" required>
-              <DatePicker value={p.date} onChange={(date) => setP({ date })} />
+            <Field label="Date received" required error={errs.date}>
+              <DatePicker value={p.date} max={S.TODAY} onChange={(date) => setP({ date })} invalid={!!errs.date} />
             </Field>
             <Field label="Amount (GHS)" required error={errs.amount}>
               <Input value={p.amount} onChange={(e) => setP({ amount: e.target.value })} inputMode="decimal" placeholder="0.00" className="text-right tabular" aria-invalid={!!errs.amount || undefined} />
             </Field>
             <Field label="Method" required error={errs.method}>
-              <Select value={p.method} onValueChange={(method) => setP({ method })} options={s.settings.paymentMethods} />
+              <Select value={p.method} onValueChange={(method) => setP({ method })} options={s.settings.paymentMethods} invalid={!!errs.method} />
             </Field>
-            <Field label="External transaction reference" error={errs.extRef}>
-              <Input value={p.extRef} onChange={(e) => setP({ extRef: e.target.value })} placeholder="Bank / MoMo reference" aria-invalid={!!errs.extRef || undefined} />
+            <Field label="Transaction reference" required={p.method !== "Cash"} error={errs.extRef}>
+              <Input value={p.extRef} onChange={(e) => setP({ extRef: e.target.value })} placeholder="Bank / MoMo / cheque no." aria-invalid={!!errs.extRef || undefined} />
+            </Field>
+            <Field label="Received by" required error={errs.receivedBy}>
+              <Select value={p.receivedBy} onValueChange={(receivedBy) => setP({ receivedBy })} options={users} invalid={!!errs.receivedBy} />
             </Field>
             <Field label="Evidence (optional)">
               <FileInput value={p.file} onChange={(file) => setP({ file })} />
             </Field>
-            <Field label="Notes" className="sm:col-span-2 lg:col-span-3">
+            <Field label="Notes">
               <Input value={p.notes} onChange={(e) => setP({ notes: e.target.value })} />
             </Field>
           </div>
 
           <div className="overflow-hidden rounded-xl border">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2.5">
-              <span className="text-[13px] font-semibold">Allocate to invoices</span>
-              <Button size="xs" variant="outline" onClick={autoAlloc}>Auto-allocate oldest first</Button>
+              <span className="text-[13px] font-semibold">Allocate to issued invoices</span>
+              <Button size="xs" variant="outline" onClick={autoAlloc} disabled={!open.length}>Auto-allocate oldest first</Button>
             </div>
-            {open.map((x) => {
-              const status = S.invStatus(x);
-              return (
-                <div key={x.id} className="grid grid-cols-[minmax(0,1fr)_7.5rem] items-center gap-x-3 gap-y-1 border-b px-3 py-2 text-[12.5px] sm:grid-cols-[minmax(0,1fr)_auto_7.5rem]">
-                  <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
-                    <span className="font-mono">{x.id}</span>
-                    <span className="text-muted-foreground">· due {S.fmtDate(x.due)}</span>
-                    <StatusBadge status={status} />
-                    <span className="w-full text-muted-foreground tabular sm:hidden">bal {S.money(S.invBal(x))}</span>
-                  </span>
-                  <span className="hidden whitespace-nowrap text-muted-foreground tabular sm:inline">bal {S.money(S.invBal(x))}</span>
-                  <Input
-                    value={p.alloc[x.id] || ""}
-                    onChange={(e) => setP({ alloc: { ...p.alloc, [x.id]: e.target.value } })}
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    aria-label={"Allocate to " + x.id}
-                    className="h-8 text-right tabular"
-                  />
-                </div>
-              );
-            })}
-            {!open.length && <div className="px-3 py-3.5 text-[12.5px] text-muted-foreground">Select a customer to see open invoices.</div>}
+            {open.map((x) => (
+              <div key={x.id} className="grid grid-cols-[minmax(0,1fr)_7.5rem] items-center gap-x-3 gap-y-1 border-b px-3 py-2 text-[12.5px] sm:grid-cols-[minmax(0,1fr)_auto_7.5rem]">
+                <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+                  <span className="font-mono">{x.id}</span>
+                  <span className="text-muted-foreground">· due {S.fmtDate(x.due)}</span>
+                  <StatusBadge status={S.invStatus(x)} />
+                  <span className="w-full text-muted-foreground tabular sm:hidden">balance {S.money(S.invBal(x))}</span>
+                </span>
+                <span className="hidden whitespace-nowrap text-muted-foreground tabular sm:inline">balance {S.money(S.invBal(x))}</span>
+                <Input
+                  value={p.alloc[x.id] || ""}
+                  onChange={(e) => setP({ alloc: { ...p.alloc, [x.id]: e.target.value } })}
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  aria-label={"Allocate to " + x.id}
+                  className={cn("h-8 text-right tabular", (toMinor(p.alloc[x.id]) || 0) > S.invBal(x) && "border-danger")}
+                />
+              </div>
+            ))}
+            {!open.length && <div className="px-3 py-3.5 text-[12.5px] text-muted-foreground">{p.customer ? "No issued invoices with a balance. The full amount will be held on account." : "Select a customer to see open invoices."}</div>}
             <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 bg-muted/60 px-3 py-2 text-[12.5px]">
               <span className="tabular">Allocated {S.money(allocMinor)} of {isNaN(amount) ? "—" : S.money(amount || 0)}</span>
               <span className={cn("tabular", unalloc < 0 ? "text-danger" : "text-muted-foreground")}>

@@ -15,14 +15,15 @@ const AGING = [
 const MIX: { label: string; v: string; sw: string }[] = [
   { label: "Paid", v: "var(--success)", sw: "bg-success" },
   { label: "Partially Paid", v: "var(--warning)", sw: "bg-warning" },
-  { label: "Unpaid", v: "var(--subtle-foreground)", sw: "bg-subtle-foreground" },
+  { label: "Issued", v: "var(--subtle-foreground)", sw: "bg-subtle-foreground" },
   { label: "Overdue", v: "var(--danger)", sw: "bg-danger" },
   { label: "Credited", v: "var(--violet)", sw: "bg-violet" },
 ];
 
-/** Receivables aging bars + invoice status donut for the invoices in scope. */
-export function FinanceCharts({ inv }: { inv: Invoice[] }) {
+/** Receivables aging bars + invoice status donut for the issued invoices in scope (drafts, cancelled and void are excluded). */
+export function FinanceCharts({ inv: all }: { inv: Invoice[] }) {
   const S = useSoap();
+  const inv = all.filter((i) => i.status === "Issued");
   const ag = [0, 0, 0, 0];
   inv.forEach((i) => {
     const b = S.invBal(i);

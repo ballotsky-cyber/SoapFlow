@@ -12,20 +12,21 @@ import { Grid, Page, PageHeader, Ref } from "@/components/shared/page";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { cn } from "@/lib/utils";
 import { DispatchDetail } from "./dispatch-detail";
+import { ReturnsTab } from "./returns-tab";
 
-type TabKey = "ready" | "active" | "done";
+type TabKey = "ready" | "active" | "done" | "returns";
 
 export default function DispatchPage() {
   const S = useSoap();
   const s = S.s;
   const isDriver = S.user().role === "driver";
-  const [tab, setTab] = React.useState<TabKey>(() => (isDriver ? "active" : "ready"));
+  const [tab, setTab] = React.useState<TabKey>(() => (s.route.tab === "returns" && !isDriver ? "returns" : isDriver ? "active" : "ready"));
   const [focusSO] = React.useState<string | undefined>(() => {
     const so = s.route.so;
     return typeof so === "string" && s.salesOrders.some((x) => x.id === so) ? so : undefined;
   });
 
-  const d0 = s.route.id ? s.dispatches.find((x) => x.id === s.route.id) : undefined;
+  const d0 = s.route.id && s.route.tab !== "returns" ? s.dispatches.find((x) => x.id === s.route.id) : undefined;
   if (d0)
     return (
       <Page>
@@ -51,6 +52,7 @@ export default function DispatchPage() {
     ...(isDriver ? [] : [{ value: "ready" as TabKey, label: "Ready to pick", count: readySO.length }]),
     { value: "active" as TabKey, label: isDriver ? "My deliveries" : "In progress", count: active.length },
     { value: "done" as TabKey, label: "Completed & exceptions", count: done.length },
+    ...(isDriver ? [] : [{ value: "returns" as TabKey, label: "Returns", count: s.returns.filter((r) => sc.includes(r.wh) && r.status !== "Inspected").length }]),
   ];
 
   const start = (soId: string) => {
@@ -63,9 +65,11 @@ export default function DispatchPage() {
 
   return (
     <Page>
-      <PageHeader icon={Truck} title="Dispatch & deliveries" description="Pick, verify and hand over. Stock is deducted exactly once — at handover or when the vehicle leaves." />
+      <PageHeader icon={Truck} title="Deliveries" description="Dispatch & deliveries: pick, verify and hand over. Stock is deducted exactly once — at handover or when the vehicle leaves. Returns are restored only after inspection." />
       <Tabs value={tab} onValueChange={setTab} items={tabs} />
-      {tab === "ready" ? (
+      {tab === "returns" ? (
+        <ReturnsTab focus={s.route.tab === "returns" && typeof s.route.id === "string" ? s.route.id : undefined} />
+      ) : tab === "ready" ? (
         readySO.length ? (
           <Grid min={320}>
             {readySO.map((x) => (

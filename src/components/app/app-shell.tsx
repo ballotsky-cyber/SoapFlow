@@ -137,10 +137,14 @@ function Sidebar({ showLabels, floating, onNavigate, onToggle }: { showLabels: b
     stockcontrol: s.adjustments.filter((a) => isc(a.wh) && a.status === "Pending Approval").length,
     transfers: s.transfers.filter((t) => (isc(t.from) || isc(t.to)) && ["Requested", "Approved", "In Transit"].includes(t.status)).length,
     "sales-orders": s.salesOrders.filter((o) => isc(o.wh) && o.status === "Pending Approval").length,
-    dispatch: s.dispatches.filter((d) => isc(d.wh) && ["Picking", "Verified", "Assigned", "Out for delivery"].includes(d.status) && (S.user().role !== "driver" || d.driver === s.currentUser)).length,
-    finance: s.invoices.filter((i) => S.invStatus(i) === "Overdue").length,
+    dispatch:
+      s.dispatches.filter((d) => isc(d.wh) && ["Picking", "Verified", "Assigned", "Out for delivery"].includes(d.status) && (S.user().role !== "driver" || d.driver === s.currentUser)).length +
+      (S.user().role === "driver" ? 0 : s.returns.filter((r) => isc(r.wh) && r.status !== "Inspected").length),
+    estimates: s.estimates.filter((e) => S.estStatus(e) === "Accepted").length,
+    invoices: s.invoices.filter((i) => isc(i.wh) && S.invStatus(i) === "Overdue").length,
+    payments: s.payments.filter((p) => p.status === "Recorded").length,
   };
-  const urgent: Record<string, boolean> = { finance: true, stockcontrol: true };
+  const urgent: Record<string, boolean> = { invoices: true, stockcontrol: true };
   const groups = NAV.map((g) => ({ ...g, items: g.items.filter((i) => !i.perm || S.canView(i.perm)) })).filter((g) => g.items.length);
 
   return (

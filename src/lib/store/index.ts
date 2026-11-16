@@ -23,7 +23,7 @@ export function useSoap(): SoapStore {
 
 /* ---------- URL <-> route mapping: /{name}/{id}?tab=…&action=… */
 
-const PARAM_KEYS = ["tab", "action", "filter", "kind", "view", "sku"] as const;
+const PARAM_KEYS = ["tab", "action", "filter", "kind", "view", "sku", "so", "est", "inv", "customer"] as const;
 
 export function routeToUrl(r: Route): string {
   const path = "/" + (r.name === "dashboard" && !r.id ? "" : r.name + (r.id ? "/" + encodeURIComponent(r.id) : ""));

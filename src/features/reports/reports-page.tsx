@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Download, Lock, TrendingUp } from "lucide-react";
+import { ChartColumn, Download, Lock, TrendingUp } from "lucide-react";
 import { useSoap } from "@/lib/store";
+import type { ModuleProps } from "@/components/app/modules";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -12,7 +13,7 @@ import { Skeleton } from "@/components/ui/misc";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Page, PageHeader, StatCard } from "@/components/shared/page";
 import { cn } from "@/lib/utils";
-import { ALL_REPORTS, REPORT_DESC, REPORT_GROUPS } from "./report-defs";
+import { REPORT_DESC, REPORT_GROUPS, SALES_GROUPS } from "./report-defs";
 import { buildReport, type ReportOut } from "./build-report";
 import { ReportChart } from "./report-chart";
 
@@ -25,6 +26,7 @@ interface Filters {
   wh: string;
   brand: string;
   sku: string;
+  customer: string;
 }
 
 const PRESETS = [
@@ -36,17 +38,22 @@ const PRESETS = [
 
 const clock = () => new Date().toTimeString().slice(0, 5);
 
-export default function ReportsPage() {
+/** Reports module. view "sales" (Sales → Sales reports) shows only the sales & receivables groups. */
+export default function ReportsPage({ view }: ModuleProps) {
   const S = useSoap();
   const s = S.s;
+  const sales = view === "sales";
+  const groups = sales ? SALES_GROUPS : REPORT_GROUPS;
+  const reports = groups.flatMap((g) => g.items);
   const [f, setF] = React.useState<Filters>(() => ({
-    rep: typeof s.route.report === "string" && s.route.report ? s.route.report : "stock",
+    rep: typeof s.route.report === "string" && reports.some((r) => r.key === s.route.report) ? s.route.report : sales ? "sales-customer" : "stock",
     from: S.addDays(S.TODAY, -29),
     to: S.TODAY,
     preset: 30,
     wh: "SCOPE",
     brand: "",
     sku: "",
+    customer: "",
   }));
   const [gen, setGen] = React.useState(false);
   const [genAt, setGenAt] = React.useState(clock);
@@ -64,10 +71,10 @@ export default function ReportsPage() {
     }, 350);
   };
 
-  const cur = ALL_REPORTS.find((x) => x.key === f.rep) ?? ALL_REPORTS[0];
+  const cur = reports.find((x) => x.key === f.rep) ?? reports[0];
   const locked = !S.canView(cur.perm);
   const whs = f.wh === "SCOPE" ? S.scope() : [f.wh];
-  const out: ReportOut = locked ? { cols: [], rows: [], raw: [], summary: [] } : buildReport(cur.key, S, whs, f.from, f.to, f.brand, f.sku);
+  const out: ReportOut = locked ? { cols: [], rows: [], raw: [], summary: [] } : buildReport(cur.key, S, whs, f.from, f.to, cur.usesProduct ? f.brand : "", cur.usesProduct ? f.sku : "", cur.usesCustomer ? f.customer : "");
   const exp = (ext: "csv" | "xls") => () =>
     S.csv("report-" + cur.key + "-" + f.from + "-to-" + f.to + (ext === "xls" ? "-excel" : ""), out.cols.map((c) => c.label), out.raw);
 
@@ -77,14 +84,18 @@ export default function ReportsPage() {
   return (
     <Page>
       <PageHeader
-        icon={TrendingUp}
-        title="Reports"
-        description="Operational and financial reports from demonstration data. Revenue, inventory value, gross profit, expenses, receivables and payables are reported separately."
+        icon={sales ? ChartColumn : TrendingUp}
+        title={sales ? "Sales reports" : "Reports"}
+        description={
+          sales
+            ? "Sales, estimates, invoices, collections and receivables — computed from issued documents. Filter by date, warehouse and customer; export to CSV or Excel."
+            : "Operational and financial reports from demonstration data. Revenue, inventory value, gross profit, expenses, receivables and payables are reported separately."
+        }
       />
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[260px_minmax(0,1fr)]">
         {/* Report picker: list on desktop, select on phones/tablets */}
         <Card className="no-print hidden flex-col gap-0.5 p-2 lg:flex">
-          {REPORT_GROUPS.map((g) => (
+          {groups.map((g) => (
             <React.Fragment key={g.label}>
               <div className="px-2 pt-2 pb-1 text-[10.5px] font-semibold tracking-[0.07em] text-muted-foreground uppercase">{g.label}</div>
               {g.items.map((r) => {
@@ -114,7 +125,7 @@ export default function ReportsPage() {
           aria-label="Report"
           value={cur.key}
           onValueChange={(v) => regen({ rep: v })}
-          options={ALL_REPORTS.map((r) => ({ value: r.key, label: (REPORT_GROUPS.find((g) => g.items.includes(r))?.label ?? "") + " · " + r.label + (S.canView(r.perm) ? "" : " (restricted)") }))}
+          options={reports.map((r) => ({ value: r.key, label: (groups.find((g) => g.items.includes(r))?.label ?? "") + " · " + r.label + (S.canView(r.perm) ? "" : " (restricted)") }))}
         />
 
         <div className="flex min-w-0 flex-col gap-3">
@@ -154,6 +165,9 @@ export default function ReportsPage() {
                 </>
               )}
               <Select size="sm" aria-label="Warehouse" value={f.wh} onValueChange={(v) => regen({ wh: v })} options={whOpts} className="w-full sm:w-56" />
+              {cur.usesCustomer && (
+                <Select size="sm" aria-label="Customer" value={f.customer} onValueChange={(v) => regen({ customer: v })} options={[{ value: "", label: "All customers" }, ...s.customers.map((c) => ({ value: c.id, label: c.name }))]} className="w-full sm:w-52" />
+              )}
               {cur.usesProduct && (
                 <>
                   <Select size="sm" aria-label="Brand" value={f.brand} onValueChange={(v) => regen({ brand: v, sku: "" })} options={[{ value: "", label: "All brands" }, ...s.brands.map((b) => b.id)]} className="w-[calc(50%-4px)] sm:w-36" />

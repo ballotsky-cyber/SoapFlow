@@ -1,17 +1,11 @@
-/* Local shapes for the finance collections the engine types as `any[]`. */
+/* Local shapes for the supplier-side finance collections the engine types as `any[]`.
+   Customer invoices, payments and credit notes are typed by the store (see lib/store/types.ts). */
 
-export interface Alloc { inv: string; amount: number }
-
-export interface Payment {
-  id: string; customer: string; date: string; amount: number; method: string; extRef: string; by: string;
-  alloc: Alloc[]; status: string; notes?: string; evidence?: string; unallocated?: number; verifiedBy?: string; reversal?: string;
-}
-
-export interface CreditNote { id: string; inv: string; customer: string; date: string; amount: number; reason: string; by: string }
+export interface SupplierAlloc { inv: string; amount: number }
 
 export interface SupplierInvoice { id: string; supplier: string; po: string; grn?: string; due: string; total: number; paid: number; lines: { sku: string; qty: number }[] }
 
-export interface SupplierPayment { id: string; supplier: string; date: string; amount: number; method: string; ref: string; alloc: Alloc[]; by: string }
+export interface SupplierPayment { id: string; supplier: string; date: string; amount: number; method: string; ref: string; alloc: SupplierAlloc[]; by: string }
 
 export interface Expense {
   id: string; date: string; category: string; wh: string; amount: number; method: string; ref?: string; description: string;

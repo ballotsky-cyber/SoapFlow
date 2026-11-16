@@ -77,8 +77,8 @@ export default function DashboardPage() {
   const openPO = s.pos.filter((p) => p.status === "Approved" && S.poDelivery(p) !== "Fully received" && isc(p.wh));
   const awaiting = s.salesOrders.filter((o) => isc(o.wh) && AWAITING_STATUSES.includes(o.status));
   const trIn = s.transfers.filter((t) => isc(t.to) && ["In Transit", "Partially Received"].includes(t.status));
-  const ar = s.invoices.filter((i) => isc(i.wh)).reduce((a, i) => a + S.invBal(i), 0);
-  const overdue = s.invoices.filter((i) => isc(i.wh) && S.invStatus(i) === "Overdue");
+  const ar = s.invoices.filter((i) => isc(i.wh) && i.status === "Issued").reduce((a, i) => a + S.invBal(i), 0);
+  const overdue = s.invoices.filter((i) => isc(i.wh) && i.status === "Issued" && S.invStatus(i) === "Overdue");
   const ap = s.supplierInvoices.reduce((a: number, i) => a + i.total - i.paid, 0);
   const activeProducts = s.products.filter((p) => p.status === "Active");
   const plabel = ({ 1: "today", 7: "last 7 days", 30: "last 30 days", 90: "last 90 days" } as Record<number, string>)[per];
@@ -113,8 +113,8 @@ export default function DashboardPage() {
       items: [
         { label: "Sales revenue (invoiced)", value: S.moneyShort(P.rev), sub: "vs previous period", icon: TrendingUp, go: nav("reports", { report: "pnl" }), delta: delta(P.rev, prev.rev) },
         { label: "Gross profit", value: S.moneyShort(P.gp), sub: P.margin + "% margin", icon: PiggyBank, go: nav("reports", { report: "pnl" }), delta: delta(P.gp, prev.gp) },
-        { label: "Outstanding customer balances", value: S.moneyShort(ar), sub: overdue.length + " overdue invoices", icon: FileText, go: nav("finance") },
-        { label: "Outstanding supplier balances", value: S.moneyShort(ap), sub: s.supplierInvoices.filter((i) => i.total > i.paid).length + " open supplier invoices", icon: ReceiptText, go: nav("finance", { tab: "supplier" }) },
+        { label: "Outstanding customer balances", value: S.moneyShort(ar), sub: overdue.length + " overdue invoices", icon: FileText, go: nav("invoices") },
+        { label: "Outstanding supplier balances", value: S.moneyShort(ap), sub: s.supplierInvoices.filter((i) => i.total > i.paid).length + " open supplier invoices", icon: ReceiptText, go: nav("finance") },
       ],
     });
 

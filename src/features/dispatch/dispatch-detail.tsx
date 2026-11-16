@@ -117,7 +117,7 @@ export function DispatchDetail({ d: x }: { d: Doc }) {
         if (!form.collector.trim()) return setErr("Record who collected the goods.");
         S.confirm({
           title: "Complete handover for " + x.id + "?",
-          body: "Stock is deducted once for the handed-over quantities, reservations are consumed, COGS is recorded at weighted-average cost and an invoice is raised. This cannot be repeated.",
+          body: "Stock is deducted once for the handed-over quantities, reservations are consumed and COGS is recorded at weighted-average cost." + (o?.terms === "Cash" || s.settings.autoInvoiceOnDispatch ? " An invoice is raised for the handed-over quantities." : " Invoice the order from its sales order.") + " This cannot be repeated.",
           confirmLabel: "Complete handover",
           onConfirm: () => {
             const r = S.dispatchHandover(x.id, { collector: form.collector.trim(), collectorId: form.collectorId.trim(), handed });
@@ -144,7 +144,7 @@ export function DispatchDetail({ d: x }: { d: Doc }) {
       go: () =>
         S.confirm({
           title: "Dispatch " + x.id + "?",
-          body: "Verified quantities leave " + S.wh(x.wh).name + " with " + S.uname(x.driver) + ". Stock is deducted now (once) and the invoice is raised.",
+          body: "Verified quantities leave " + S.wh(x.wh).name + " with " + S.uname(x.driver) + ". Stock is deducted now (once)." + (s.settings.autoInvoiceOnDispatch ? " An invoice is raised for the dispatched quantities." : " Invoicing follows the sales order (Settings: invoices are not raised at dispatch)."),
           confirmLabel: "Confirm dispatch",
           onConfirm: () => S.result(S.dispatchOut(x.id), "Dispatched"),
         }),
@@ -164,7 +164,7 @@ export function DispatchDetail({ d: x }: { d: Doc }) {
   const banner: { text: string; tone: "success" | "info" | "warning" } | null = x.outcomeNote
     ? { text: x.status + ": " + x.outcomeNote, tone: "warning" }
     : x.deducted
-      ? { text: "Stock deducted once on " + S.fmtDate(x.dispatchedAt) + (x.invoice ? " · invoice " + x.invoice : "") + (x.cogs ? " · COGS " + S.money(x.cogs) : "") + ". Any further attempt to dispatch is blocked.", tone: "success" }
+      ? { text: "Stock deducted once on " + S.fmtDate(x.dispatchedAt) + (x.invoice ? " · invoice " + x.invoice + " raised at dispatch" : " · invoiced separately from the sales order") + (x.cogs ? " · COGS " + S.money(x.cogs) : "") + ". Any further attempt to dispatch is blocked.", tone: "success" }
       : x.status === "Picking"
         ? { text: "Pick from the reserved stock. Quantities above the order are blocked to prevent over-dispatch. Nothing is deducted yet.", tone: "info" }
         : null;
@@ -174,7 +174,7 @@ export function DispatchDetail({ d: x }: { d: Doc }) {
   const lockText = S.role().readonly ? "Read-only role." : x.deducted && !outcome ? "Dispatch posted — locked." : isDriver && x.driver !== me ? "Assigned to another officer." : "No actions for your role.";
   const showAssign = !coll && x.status === "Verified" && canProcess;
   const customer = S.cust(o?.customer ?? "").name + (o?.walkin ? " — " + o.walkin : "");
-  const printLabel = coll ? "Collection note" : "Dispatch note";
+  const printLabel = coll ? "Collection note" : "Delivery note";
   const drivers = s.users.filter((u) => u.role === "driver" && u.status === "Active").map((u) => ({ value: u.id, label: u.name }));
 
   return (
@@ -191,7 +191,13 @@ export function DispatchDetail({ d: x }: { d: Doc }) {
             <span>{x.so + " · " + S.wh(x.wh).name + " · " + (o?.terms ?? "") + (x.driver ? " · officer " + S.uname(x.driver) + (x.vehicle ? " (" + x.vehicle + ")" : "") : "") + (o?.address && !coll ? " · " + o.address : "")}</span>
           </>
         }
-        actions={x.deducted && <Button variant="outline" onClick={() => setPrint(true)}><Printer />{printLabel}</Button>}
+        actions={
+          <>
+            {x.invoice && S.canView("fin.view") && <Button variant="outline" onClick={() => S.nav("invoices", { id: x.invoice })}>Invoice {x.invoice}</Button>}
+            {o && <Button variant="outline" onClick={() => S.nav("sales-orders", { id: o.id })}>Sales order</Button>}
+            {x.deducted && <Button variant="outline" onClick={() => setPrint(true)}><Printer />{printLabel}</Button>}
+          </>
+        }
       />
 
       <Card className="flex overflow-x-auto px-4 py-3">

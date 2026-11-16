@@ -1,8 +1,12 @@
 /* SoapFlow demo store — ILLUSTRATIVE DATA. All transactions are simulated client-side.
    Money: integer pesewas (minor units). Unit cost: integer GHS×10^4 per bar ("c4"). No float arithmetic on money. */
-/* Ported from the HTML prototype as-is; createSoapStore() must only run in the browser (uses localStorage). */
+/* Ported from the HTML prototype; createSoapStore() must only run in the browser (uses localStorage).
+   The commercial module (estimates, invoicing, payments, credit notes, returns, masters) lives in commerce.ts. */
+import { installCommerce, SCHEMA } from './commerce.ts';
+
 export function createSoapStore() {
   const KEY = 'soapflow-demo-v1';
+  const SEQ_KEY = KEY + ':seq';
   const TODAY = '2026-10-22';
   let seed = 20261022;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
@@ -13,22 +17,22 @@ export function createSoapStore() {
   const clock = () => { const d = new Date(); return TODAY + ' ' + pad(d.getHours(), 2) + ':' + pad(d.getMinutes(), 2); };
   const WH = ['TMA', 'KSI', 'TKD', 'TML'];
 
-  const PERMS = ['inv.view', 'inv.adjust.request', 'inv.adjust.approve', 'inv.count', 'cat.edit', 'rcv.view', 'rcv.create', 'rcv.approve', 'trf.view', 'trf.create', 'trf.approve', 'trf.dispatch', 'trf.receive', 'po.view', 'po.create', 'po.approve', 'sup.view', 'so.view', 'so.create', 'so.approve', 'cus.view', 'dsp.view', 'dsp.process', 'dsp.deliver', 'fin.view', 'fin.record', 'fin.verify', 'exp.view', 'exp.create', 'exp.approve', 'rpt.ops', 'rpt.fin', 'usr.manage', 'set.manage', 'audit.view', 'cost.view'];
-  const VIEW = ['inv.view', 'rcv.view', 'trf.view', 'po.view', 'sup.view', 'so.view', 'cus.view', 'dsp.view', 'fin.view', 'exp.view', 'rpt.ops', 'rpt.fin', 'audit.view', 'cost.view'];
+  const PERMS = ['inv.view', 'inv.adjust.request', 'inv.adjust.approve', 'inv.count', 'cat.edit', 'rcv.view', 'rcv.create', 'rcv.approve', 'trf.view', 'trf.create', 'trf.approve', 'trf.dispatch', 'trf.receive', 'po.view', 'po.create', 'po.approve', 'sup.view', 'est.view', 'est.create', 'so.view', 'so.create', 'so.approve', 'cus.view', 'cus.edit', 'dsp.view', 'dsp.process', 'dsp.deliver', 'rtn.inspect', 'fin.view', 'sinv.create', 'sinv.issue', 'fin.record', 'fin.verify', 'fin.reverse', 'cn.create', 'doc.cancel', 'exp.view', 'exp.create', 'exp.approve', 'rpt.ops', 'rpt.fin', 'usr.manage', 'set.manage', 'audit.view', 'cost.view'];
+  const VIEW = ['inv.view', 'rcv.view', 'trf.view', 'po.view', 'sup.view', 'est.view', 'so.view', 'cus.view', 'dsp.view', 'fin.view', 'exp.view', 'rpt.ops', 'rpt.fin', 'audit.view', 'cost.view'];
   const ROLES = {
     admin: { name: 'System Administrator', perms: PERMS },
     owner: { name: 'Business Owner / Director', perms: PERMS.filter(p => !['dsp.deliver', 'usr.manage', 'set.manage', 'inv.count', 'dsp.process'].includes(p)) },
-    ops: { name: 'Operations Manager', perms: ['inv.view', 'inv.adjust.request', 'inv.adjust.approve', 'inv.count', 'cat.edit', 'rcv.view', 'rcv.create', 'rcv.approve', 'trf.view', 'trf.create', 'trf.approve', 'trf.dispatch', 'trf.receive', 'po.view', 'po.create', 'po.approve', 'sup.view', 'so.view', 'so.approve', 'cus.view', 'dsp.view', 'dsp.process', 'exp.view', 'exp.create', 'rpt.ops', 'cost.view', 'audit.view'] },
-    wm: { name: 'Warehouse Manager', perms: ['inv.view', 'inv.adjust.request', 'inv.adjust.approve', 'inv.count', 'rcv.view', 'rcv.create', 'rcv.approve', 'trf.view', 'trf.create', 'trf.approve', 'trf.dispatch', 'trf.receive', 'po.view', 'sup.view', 'so.view', 'dsp.view', 'dsp.process', 'exp.view', 'exp.create', 'rpt.ops'] },
+    ops: { name: 'Operations Manager', perms: ['inv.view', 'inv.adjust.request', 'inv.adjust.approve', 'inv.count', 'cat.edit', 'rcv.view', 'rcv.create', 'rcv.approve', 'trf.view', 'trf.create', 'trf.approve', 'trf.dispatch', 'trf.receive', 'po.view', 'po.create', 'po.approve', 'sup.view', 'est.view', 'est.create', 'so.view', 'so.create', 'so.approve', 'cus.view', 'cus.edit', 'dsp.view', 'dsp.process', 'rtn.inspect', 'fin.view', 'sinv.create', 'doc.cancel', 'exp.view', 'exp.create', 'rpt.ops', 'cost.view', 'audit.view'] },
+    wm: { name: 'Warehouse Manager', perms: ['inv.view', 'inv.adjust.request', 'inv.adjust.approve', 'inv.count', 'rcv.view', 'rcv.create', 'rcv.approve', 'trf.view', 'trf.create', 'trf.approve', 'trf.dispatch', 'trf.receive', 'po.view', 'sup.view', 'so.view', 'dsp.view', 'dsp.process', 'rtn.inspect', 'exp.view', 'exp.create', 'rpt.ops'] },
     sk: { name: 'Storekeeper', perms: ['inv.view', 'inv.adjust.request', 'inv.count', 'rcv.view', 'rcv.create', 'trf.view', 'trf.dispatch', 'trf.receive', 'dsp.view', 'dsp.process', 'rpt.ops'] },
     proc: { name: 'Procurement Officer', perms: ['inv.view', 'cat.edit', 'rcv.view', 'po.view', 'po.create', 'sup.view', 'exp.view', 'rpt.ops', 'cost.view'] },
-    sales: { name: 'Sales Officer', perms: ['inv.view', 'so.view', 'so.create', 'cus.view', 'dsp.view', 'rpt.ops'] },
+    sales: { name: 'Sales Officer', perms: ['inv.view', 'est.view', 'est.create', 'so.view', 'so.create', 'cus.view', 'cus.edit', 'dsp.view', 'fin.view', 'sinv.create', 'rpt.ops'] },
     dispatch: { name: 'Dispatch Officer', perms: ['inv.view', 'so.view', 'dsp.view', 'dsp.process', 'trf.view', 'trf.dispatch', 'rpt.ops'] },
     driver: { name: 'Driver / Delivery Officer', perms: ['dsp.view', 'dsp.deliver'] },
-    acct: { name: 'Accountant / Finance Officer', perms: ['inv.view', 'po.view', 'sup.view', 'so.view', 'so.approve', 'cus.view', 'fin.view', 'fin.record', 'fin.verify', 'exp.view', 'exp.create', 'exp.approve', 'rpt.ops', 'rpt.fin', 'cost.view', 'audit.view'] },
+    acct: { name: 'Accountant / Finance Officer', perms: ['inv.view', 'po.view', 'sup.view', 'est.view', 'so.view', 'so.approve', 'cus.view', 'cus.edit', 'fin.view', 'sinv.create', 'sinv.issue', 'fin.record', 'fin.verify', 'fin.reverse', 'cn.create', 'doc.cancel', 'exp.view', 'exp.create', 'exp.approve', 'rpt.ops', 'rpt.fin', 'cost.view', 'audit.view'] },
     auditor: { name: 'Read-only Auditor', perms: VIEW, readonly: true },
   };
-  const PERM_LABELS = { 'inv.view': 'View stock', 'inv.adjust.request': 'Request adjustments', 'inv.adjust.approve': 'Approve adjustments', 'inv.count': 'Stocktaking', 'cat.edit': 'Edit catalogue', 'rcv.view': 'View receipts', 'rcv.create': 'Record receipts', 'rcv.approve': 'Approve & post receipts', 'trf.view': 'View transfers', 'trf.create': 'Request transfers', 'trf.approve': 'Approve transfers', 'trf.dispatch': 'Dispatch transfers', 'trf.receive': 'Receive transfers', 'po.view': 'View POs', 'po.create': 'Create POs', 'po.approve': 'Approve POs', 'sup.view': 'View suppliers', 'so.view': 'View sales orders', 'so.create': 'Create sales orders', 'so.approve': 'Approve credit/discounts', 'cus.view': 'View customers', 'dsp.view': 'View dispatch', 'dsp.process': 'Pick & dispatch', 'dsp.deliver': 'Record deliveries', 'fin.view': 'View invoices & payments', 'fin.record': 'Record payments', 'fin.verify': 'Verify payments / credit notes', 'exp.view': 'View expenses', 'exp.create': 'Record expenses', 'exp.approve': 'Approve expenses', 'rpt.ops': 'Operational reports', 'rpt.fin': 'Financial reports', 'usr.manage': 'Manage users', 'set.manage': 'System settings', 'audit.view': 'Audit trail', 'cost.view': 'See costs & valuation' };
+  const PERM_LABELS = { 'inv.view': 'View stock', 'inv.adjust.request': 'Request adjustments', 'inv.adjust.approve': 'Approve adjustments', 'inv.count': 'Stocktaking', 'cat.edit': 'Manage products & catalogue lists', 'rcv.view': 'View receipts', 'rcv.create': 'Record receipts', 'rcv.approve': 'Approve & post receipts', 'trf.view': 'View transfers', 'trf.create': 'Request transfers', 'trf.approve': 'Approve transfers', 'trf.dispatch': 'Dispatch transfers', 'trf.receive': 'Receive transfers', 'po.view': 'View POs', 'po.create': 'Create POs', 'po.approve': 'Approve POs', 'sup.view': 'View suppliers', 'est.view': 'View estimates', 'est.create': 'Create & manage estimates', 'so.view': 'View sales orders', 'so.create': 'Create sales orders', 'so.approve': 'Approve credit/discounts', 'cus.view': 'View customers', 'cus.edit': 'Create & edit customers', 'dsp.view': 'View dispatch', 'dsp.process': 'Pick & dispatch', 'dsp.deliver': 'Record deliveries', 'rtn.inspect': 'Inspect customer returns', 'fin.view': 'View invoices & payments', 'sinv.create': 'Create & edit draft invoices', 'sinv.issue': 'Issue invoices', 'fin.record': 'Record payments', 'fin.verify': 'Verify payments', 'fin.reverse': 'Reverse payments', 'cn.create': 'Issue credit notes', 'doc.cancel': 'Cancel orders / void invoices', 'exp.view': 'View expenses', 'exp.create': 'Record expenses', 'exp.approve': 'Approve expenses', 'rpt.ops': 'Operational reports', 'rpt.fin': 'Financial reports', 'usr.manage': 'Manage users', 'set.manage': 'System settings', 'audit.view': 'Audit trail', 'cost.view': 'See costs & valuation' };
 
   function seedState() {
     seed = 20261022;
@@ -262,9 +266,7 @@ export function createSoapStore() {
     };
   }
 
-  let st;
-  try { const raw = localStorage.getItem(KEY); st = raw ? JSON.parse(raw) : null; } catch (e) { st = null; }
-  if (!st || st.v !== 1) st = seedState();
+  let st = null; // loaded (and migrated) once the engine helpers below exist
   const ui = { toasts: [], confirm: null, loading: false };
   const listeners = new Set();
   const hooks = { onNavigate: null };
@@ -292,15 +294,27 @@ export function createSoapStore() {
   const moneyShort = m => { const a = Math.abs(m) / 100; const s = a >= 1e6 ? (a / 1e6).toFixed(2) + 'M' : a >= 1e3 ? (a / 1e3).toFixed(1) + 'K' : a.toFixed(0); return (m < 0 ? '−' : '') + 'GHS ' + s; };
   const cost = c4 => 'GHS ' + Math.floor(c4 / 10000) + '.' + pad(c4 % 10000, 4);
   const valueOf = (qty, c4) => Math.round(qty * c4 / 100);
-  const qty = (sku, bars) => { if (bars == null) return '—'; const p = prod(sku); const neg = bars < 0; let b = Math.abs(bars); const c = Math.floor(b / bpc(sku)); b -= c * bpc(sku); const k = Math.floor(b / p.packBars); b -= k * p.packBars; const parts = []; if (c) parts.push(c + ' ctn'); if (k) parts.push(k + ' pk'); if (b || !parts.length) parts.push(b + (b === 1 ? ' bar' : ' bars')); return (neg ? '−' : '') + parts.join(' '); };
-  const toBars = (sku, n, unit) => { const p = prod(sku); n = Math.floor(Number(n) || 0); return unit === 'ctn' ? n * bpc(sku) : unit === 'pk' ? n * p.packBars : n; };
+  const baseLabel = (sku, n) => { const u = (st.units || []).find(x => x.code === (prod(sku).baseUnit || 'bar')); return u ? (n === 1 ? u.name.toLowerCase() : u.plural) : (n === 1 ? 'bar' : 'bars'); };
+  const qty = (sku, bars) => { if (bars == null) return '—'; const p = prod(sku); const neg = bars < 0; let b = Math.abs(bars); const c = bpc(sku) > 1 ? Math.floor(b / bpc(sku)) : 0; b -= c * bpc(sku); const k = p.packBars > 1 ? Math.floor(b / p.packBars) : 0; b -= k * p.packBars; const parts = []; if (c) parts.push(c + ' ctn'); if (k) parts.push(k + ' pk'); if (b || !parts.length) parts.push(b + ' ' + baseLabel(sku, b)); return (neg ? '−' : '') + parts.join(' '); };
+  const toBars = (sku, n, unit) => Math.floor(Number(n) || 0) * (C.unitFactor(sku, unit) || 1);
   const fmtDate = iso => { if (!iso) return '—'; const [d, t] = iso.split(' '); const dt = new Date(d + 'T00:00:00Z'); const s = dt.getUTCDate() + ' ' + 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[dt.getUTCMonth()] + (d.slice(0, 4) !== TODAY.slice(0, 4) ? ' ' + d.slice(0, 4) : ''); return t ? s + ', ' + t : s; };
   const TONES = { green: ['#e3f3ea', '#146c3a'], blue: ['#e6eefc', '#1d4fbf'], amber: ['#fcf1dc', '#8a4b00'], red: ['#fde8e7', '#b3261e'], gray: ['#eceff3', '#46505e'], violet: ['#efeafc', '#5b3cb0'] };
-  const STATUS_TONE = { Posted: 'green', Received: 'green', Completed: 'green', Delivered: 'green', Paid: 'green', Verified: 'green', Active: 'green', OK: 'green', 'Fully received': 'green', Approved: 'blue', Confirmed: 'blue', 'In Transit': 'violet', Dispatched: 'violet', 'Out for delivery': 'violet', Arrived: 'blue', Counting: 'blue', Picking: 'blue', 'Ready for Collection': 'blue', 'Ready for Dispatch': 'blue', Assigned: 'blue', 'Pending Approval': 'amber', Requested: 'amber', 'Partially Received': 'amber', 'Partially Fulfilled': 'amber', 'Partially Paid': 'amber', Recorded: 'amber', Low: 'amber', 'Partially received': 'amber', 'Near expiry': 'amber', 'Partially delivered': 'amber', 'Pending pick': 'gray', Unpaid: 'gray', Rejected: 'red', Disputed: 'red', Overdue: 'red', Failed: 'red', 'Out of stock': 'red', Expired: 'red', Suspended: 'red', Mismatch: 'red', Draft: 'gray', Cancelled: 'gray', Credited: 'gray', Discontinued: 'gray', Reversed: 'gray', 'Not received': 'gray', Inactive: 'gray', Matched: 'green', Quarantined: 'amber', Sellable: 'green' };
+  const STATUS_TONE = { Posted: 'green', Received: 'green', Completed: 'green', Delivered: 'green', Paid: 'green', Verified: 'green', Active: 'green', OK: 'green', 'Fully received': 'green', Approved: 'blue', Confirmed: 'blue', 'In Transit': 'violet', Dispatched: 'violet', 'Out for delivery': 'violet', Arrived: 'blue', Counting: 'blue', Picking: 'blue', 'Ready for Collection': 'blue', 'Ready for Dispatch': 'blue', Assigned: 'blue', 'Pending Approval': 'amber', Requested: 'amber', 'Partially Received': 'amber', 'Partially Fulfilled': 'amber', 'Partially Paid': 'amber', Recorded: 'amber', Low: 'amber', 'Partially received': 'amber', 'Near expiry': 'amber', 'Partially delivered': 'amber', 'Pending pick': 'gray', Unpaid: 'gray', Rejected: 'red', Disputed: 'red', Overdue: 'red', Failed: 'red', 'Out of stock': 'red', Expired: 'red', Suspended: 'red', Mismatch: 'red', Draft: 'gray', Cancelled: 'gray', Credited: 'gray', Discontinued: 'gray', Reversed: 'gray', 'Not received': 'gray', Inactive: 'gray', Matched: 'green', Quarantined: 'amber', Sellable: 'green', Issued: 'blue', Void: 'gray', Sent: 'blue', Accepted: 'green', Converted: 'violet', 'Not fulfilled': 'gray', 'Partially fulfilled': 'amber', Fulfilled: 'green', 'Not invoiced': 'gray', 'Partially invoiced': 'amber', 'Fully invoiced': 'green', 'Not billed': 'gray', 'Partially paid': 'amber', 'Awaiting return': 'amber', 'Pending inspection': 'amber', Inspected: 'green', Backordered: 'amber' };
   const badge = s => { const t = TONES[STATUS_TONE[s] || 'gray']; return { bg: t[0], fg: t[1] }; };
 
   // ---------- engine helpers
-  const nextRef = p => { st.seq[p] = (st.seq[p] || 0) + 1; return p + '-2026-' + pad(st.seq[p]); };
+  /* Document numbers: the counter is mirrored in its own key and re-read before every allocation, and the number is checked
+     against existing documents, so two tabs creating documents at the same time never issue the same reference. */
+  const DOC_COLLS = ['estimates', 'salesOrders', 'invoices', 'payments', 'creditNotes', 'returns', 'dispatches', 'receipts', 'transfers', 'pos', 'expenses', 'adjustments', 'counts', 'supplierPayments'];
+  const taken = id => DOC_COLLS.some(c => (st[c] || []).some(d => d.id === id || d.rct === id));
+  const nextRef = p => {
+    let shared = {}; try { shared = JSON.parse(localStorage.getItem(SEQ_KEY) || '{}'); } catch (e) { }
+    let n = Math.max(st.seq[p] || 0, shared[p] || 0); let id;
+    do { n++; id = p + '-' + TODAY.slice(0, 4) + '-' + pad(n); } while (taken(id));
+    st.seq[p] = n; shared[p] = n;
+    try { localStorage.setItem(SEQ_KEY, JSON.stringify(shared)); } catch (e) { }
+    return id;
+  };
   const bal = (w, sku) => { const k = w + '|' + sku; if (!st.balances[k]) st.balances[k] = { wh: w, sku, sellable: 0, reserved: 0, damaged: 0, quarantined: 0, inTransit: 0, avg: prod(sku).cost4, last: TODAY }; return st.balances[k]; };
   const move = (type, w, sku, q, bucket, c4, ref) => { const b = bal(w, sku); b.last = TODAY; st.movements.unshift({ id: 'MOV-' + (st.seq.MOV++), ts: clock(), type, wh: w, sku, qty: q, bucket, cost4: c4 != null ? c4 : b.avg, ref, user: st.currentUser, after: b.sellable }); };
   const log = (action, ref, detail) => st.audit.unshift({ id: 'AUD-' + (++st.seq.AUD), ts: clock(), user: st.currentUser, action, ref, detail });
@@ -315,10 +329,16 @@ export function createSoapStore() {
   const deny = what => fail(`Not permitted for ${role().name}. ${what ? what + ' ' : ''}(In production the API returns 403 and logs the attempt.)`);
   const whDeny = w => !allowedWh().includes(w) ? fail(`You don't have access to ${wh(w).name}. Warehouse access is enforced by the backend.`) : null;
 
-  const invStatus = i => { const bal = i.total - i.paid - i.credited; if (i.credited >= i.total && i.total > 0) return 'Credited'; if (bal <= 0) return 'Paid'; if (i.due < TODAY) return 'Overdue'; if (i.paid > 0) return 'Partially Paid'; return 'Unpaid'; };
-  const invBal = i => i.total - i.paid - i.credited;
-  const custBalance = id => st.invoices.filter(i => i.customer === id).reduce((a, i) => a + invBal(i), 0);
-  const soTotal = so => so.lines.reduce((a, l) => a + l.qty * l.price - Math.round(l.qty * l.price * l.discPct / 100), 0);
+  const C = installCommerce({ get st() { return st; }, TODAY, pad, addDays, diffDays, clock, nextRef, log, move, bal, prod, cust, wh, user, can, deny, fail, ok, whDeny, money, qty, avail, wavg, day, emit: () => emit() });
+  const { invStatus, invBal, custBalance, soTotal } = C;
+
+  // ---------- load: saved demo data is migrated forward; a fresh dataset is seeded and migrated the same way
+  const fresh = () => { st = seedState(); C.migrate(st); C.seedCommerce(st); return st; };
+  try { const raw = localStorage.getItem(KEY); st = raw ? JSON.parse(raw) : null; } catch (e) { st = null; }
+  if (!st || !st.v || st.v > SCHEMA) fresh(); else if (st.v < SCHEMA) { C.migrate(st); save(); }
+  // Keep tabs consistent: adopt changes saved by another tab (this tab keeps its own route, role and warehouse).
+  if (typeof window !== 'undefined') window.addEventListener('storage', e => { if (e.key !== KEY || !e.newValue) return; try { const next = JSON.parse(e.newValue); if (next.v !== SCHEMA) return; st = Object.assign(next, { route: st.route, currentUser: st.currentUser, warehouse: st.warehouse }); version++; listeners.forEach(f => f()); } catch (err) { } });
+
   const poTotals = po => { const sub = po.lines.reduce((a, l) => a + valueOf(l.qty, l.cost4), 0); const disc = Math.round(sub * po.discPct / 100); const tax = Math.round((sub - disc) * po.taxPct / 100); return { sub, disc, tax, total: sub - disc + tax }; };
   const poReceived = (poId, sku) => st.receipts.filter(r => r.po === poId && r.status === 'Posted').reduce((a, r) => a + r.lines.filter(l => l.sku === sku).reduce((x, l) => x + l.accepted + l.damaged, 0), 0);
   const poInvoiced = (poId, sku) => st.supplierInvoices.filter(s => s.po === poId).reduce((a, s) => a + s.lines.filter(l => l.sku === sku).reduce((x, l) => x + l.qty, 0), 0);
@@ -335,26 +355,7 @@ export function createSoapStore() {
   A.confirm = cfg => { ui.confirm = cfg; emit(); };
   A.closeConfirm = () => { ui.confirm = null; emit(); };
   A.result = (r, title) => { if (r.ok) A.toast('success', title || 'Done', r.msg, r.ref); else A.toast('error', 'Action blocked', r.error); return r; };
-  A.reset = () => { st = seedState(); save(); emit(); };
-
-  A.productSave = (p, isNew) => {
-    if (!can('cat.edit')) return deny();
-    const errs = {};
-    if (!p.sku || !/^[A-Z0-9-]{4,}$/.test(p.sku)) errs.sku = 'Use 4+ characters: capitals, digits and hyphens.';
-    if (isNew && st.products.some(x => x.sku === p.sku)) errs.sku = 'SKU already exists.';
-    if (!p.name) errs.name = 'Product name is required.';
-    if (!p.brand) errs.brand = 'Select a brand.';
-    if (!p.category) errs.category = 'Category is required.';
-    if (!(p.cartonPacks > 0)) errs.cartonPacks = 'Must be at least 1.';
-    if (!(p.packBars > 0)) errs.packBars = 'Must be at least 1.';
-    if (!(p.cost4 > 0)) errs.cost4 = 'Enter a purchase cost.';
-    if (!(p.price > 0)) errs.price = 'Enter a selling price.';
-    if (p.price > 0 && p.cost4 > 0 && p.price * 100 < p.cost4) errs.price = 'Selling price is below purchase cost.';
-    if (Object.keys(errs).length) return { ok: false, error: 'Please fix the highlighted fields.', errs };
-    if (isNew) { st.products.push(Object.assign({ baseUnit: 'bar', expiryWarn: 60, priceHistory: [{ date: TODAY, price: p.price, by: user().name }] }, p)); log('Created product', p.sku, p.name); }
-    else { const x = prod(p.sku); if (x.price !== p.price) x.priceHistory = (x.priceHistory || []).concat([{ date: TODAY, price: p.price, by: user().name }]); Object.assign(x, p); log('Updated product', p.sku, 'Catalogue fields updated'); }
-    emit(); return ok(isNew ? 'Product created.' : 'Product updated.', p.sku);
-  };
+  A.reset = () => { try { localStorage.removeItem(SEQ_KEY); } catch (e) { } fresh(); save(); emit(); };
 
   A.receiptSave = (d, submit) => {
     if (!can('rcv.create')) return deny();
@@ -432,35 +433,6 @@ export function createSoapStore() {
   };
   A.poAct = (id, action, reason) => { const po = st.pos.find(p => p.id === id); if (action === 'submit') { if (!can('po.create')) return deny(); po.status = 'Pending Approval'; } else { if (!can('po.approve')) return deny(); po.status = action === 'approve' ? 'Approved' : 'Rejected'; po.approvedBy = st.currentUser; if (reason) po.reason = reason; } log('PO ' + po.status.toLowerCase(), id, reason || ''); emit(); return ok('Purchase order ' + po.status.toLowerCase() + '.', id); };
 
-  const reserve = so => { for (const l of so.lines) { const need = l.qty - l.fulfilled - l.reserved; if (need > 0 && avail(so.wh, l.sku) < need) return `Only ${qty(l.sku, avail(so.wh, l.sku))} of ${prod(l.sku).name} is available at ${wh(so.wh).name}. Reservation would over-allocate stock.`; } so.lines.forEach(l => { const need = l.qty - l.fulfilled - l.reserved; if (need > 0) { bal(so.wh, l.sku).reserved += need; l.reserved += need; } }); return null; };
-  const release = so => so.lines.forEach(l => { if (l.reserved > 0) { const b = bal(so.wh, l.sku); b.reserved = Math.max(0, b.reserved - l.reserved); l.reserved = 0; } });
-  A.soSave = (d, confirm) => {
-    if (!can('so.create')) return deny();
-    const wd = whDeny(d.wh); if (wd) return wd;
-    if (!d.customer) return fail('Select a customer or register a walk-in.');
-    if (d.customer === 'CUS-006' && !d.walkin) return fail('Enter the walk-in customer name and phone.');
-    if (!d.lines.length || d.lines.some(l => !(l.qty > 0))) return fail('Add at least one product line with a quantity.');
-    if (d.method === 'Delivery' && !d.address) return fail('Delivery address is required for delivery orders.');
-    if (d.terms === 'Credit' && cust(d.customer).limit === 0) return fail(`${cust(d.customer).name} has no credit facility. Use cash terms.`);
-    const so = { id: nextRef('SO'), customer: d.customer, walkin: d.walkin || '', wh: d.wh, date: TODAY, method: d.method, terms: d.terms, status: 'Draft', by: st.currentUser, address: d.address || '', notes: d.notes || '', lines: d.lines.map(l => ({ sku: l.sku, qty: l.qty, price: prod(l.sku).price, discPct: Number(l.discPct) || 0, fulfilled: 0, reserved: 0, returned: 0 })) };
-    let msg = 'Draft saved. No stock reserved.';
-    if (confirm) {
-      const reasons = []; const maxD = Math.max(...so.lines.map(l => l.discPct));
-      if (maxD > st.settings.maxDiscountPct && !can('so.approve')) reasons.push(`discount ${maxD}% exceeds ${st.settings.maxDiscountPct}% limit`);
-      if (so.terms === 'Credit' && st.settings.creditCheck && custBalance(so.customer) + soTotal(so) > cust(so.customer).limit) reasons.push('exceeds customer credit limit');
-      if (reasons.length) { so.status = 'Pending Approval'; so.approvalReason = reasons.join('; '); msg = 'Order needs approval: ' + so.approvalReason + '. Stock is reserved once approved.'; }
-      else { const e = reserve(so); if (e) { st.seq.SO--; return fail(e); } so.status = 'Confirmed'; msg = 'Order confirmed and available stock reserved. Physical stock is unchanged until dispatch.'; }
-    }
-    st.salesOrders.unshift(so); log('Created sales order', so.id, so.status + ' · ' + money(soTotal(so))); emit(); return ok(msg, so.id, { id: so.id });
-  };
-  A.soAct = (id, action, reason) => {
-    const so = st.salesOrders.find(s => s.id === id);
-    if (action === 'confirm') { if (!can('so.create')) return deny(); const e = reserve(so); if (e) return fail(e); so.status = 'Confirmed'; log('Confirmed sales order', id, 'Stock reserved'); emit(); return ok('Order confirmed; stock reserved.', id); }
-    if (action === 'approve') { if (!can('so.approve')) return deny(); const e = reserve(so); if (e) return fail(e); so.status = 'Confirmed'; so.approvedBy = st.currentUser; log('Approved sales order', id, so.approvalReason || ''); emit(); return ok('Approved, confirmed and stock reserved.', id); }
-    if (action === 'reject') { if (!can('so.approve')) return deny(); so.status = 'Cancelled'; so.cancelReason = reason; log('Rejected sales order', id, reason); emit(); return ok('Order rejected.', id); }
-    if (action === 'cancel') { if (!can('so.create') && !can('so.approve')) return deny(); if (['Dispatched', 'Delivered', 'Completed', 'Cancelled'].includes(so.status)) return fail('This order can no longer be cancelled. Use a return or credit note.'); release(so); so.status = 'Cancelled'; so.cancelReason = reason; st.dispatches.filter(d => d.so === id && !d.deducted).forEach(d => d.status = 'Cancelled'); log('Cancelled sales order', id, reason); emit(); return ok('Order cancelled. Reservations released back to available stock.', id); }
-  };
-
   A.dispatchStart = soId => {
     if (!can('dsp.process')) return deny(); const so = st.salesOrders.find(s => s.id === soId); const wd = whDeny(so.wh); if (wd) return wd;
     if (st.dispatches.some(d => d.so === soId && !d.deducted && d.status !== 'Cancelled')) return fail('A pick list is already open for this order.');
@@ -478,16 +450,14 @@ export function createSoapStore() {
   const deduct = (d) => {
     const so = st.salesOrders.find(s => s.id === d.so); let cogs = 0;
     for (const l of d.lines) { const q = l.handed != null ? l.handed : l.verified; const b = bal(d.wh, l.sku); const sl = so.lines.find(x => x.sku === l.sku); if (q > b.sellable) return `${l.sku}: only ${qty(l.sku, b.sellable)} sellable — negative stock prevented.`; if (q > sl.reserved + avail(d.wh, l.sku)) return `${l.sku}: quantity not reserved or available.`; }
-    const invLines = [];
-    d.lines.forEach(l => { const q = l.handed != null ? l.handed : l.verified; if (!q) return; const b = bal(d.wh, l.sku); const sl = so.lines.find(x => x.sku === l.sku); const fromRes = Math.min(sl.reserved, q); b.reserved -= fromRes; sl.reserved -= fromRes; b.sellable -= q; l.batches = consume(d.wh, l.sku, q); l.dispatched = q; l.cost4 = b.avg; cogs += valueOf(q, b.avg); sl.fulfilled += q; move('Sales dispatch', d.wh, l.sku, -q, 'sellable', b.avg, d.id); invLines.push({ sku: l.sku, qty: q, price: sl.price, discPct: sl.discPct }); });
-    d.deducted = true; d.dispatchedAt = clock();
-    const total = invLines.reduce((a, l) => a + l.qty * l.price - Math.round(l.qty * l.price * l.discPct / 100), 0);
-    const c = cust(so.customer);
-    const inv = { id: nextRef('INV'), so: so.id, dsp: d.id, customer: so.customer, wh: so.wh, date: TODAY, due: addDays(TODAY, so.terms === 'Cash' ? 0 : c.terms), lines: invLines, total, paid: 0, credited: 0, cogs };
-    st.invoices.unshift(inv); d.invoice = inv.id; d.cogs = cogs; const dy = day(d.wh); dy.rev += total; dy.cogs += cogs; dy.dsp += invLines.reduce((a, l) => a + l.qty, 0);
+    const shipped = [];
+    d.lines.forEach(l => { const q = l.handed != null ? l.handed : l.verified; if (!q) return; const b = bal(d.wh, l.sku); const sl = so.lines.find(x => x.sku === l.sku); const fromRes = Math.min(sl.reserved, q); b.reserved -= fromRes; sl.reserved -= fromRes; b.sellable -= q; l.batches = consume(d.wh, l.sku, q); l.dispatched = q; l.cost4 = b.avg; cogs += valueOf(q, b.avg); sl.fulfilled += q; move('Sales dispatch', d.wh, l.sku, -q, 'sellable', b.avg, d.id); shipped.push({ sku: l.sku, qty: q }); });
+    d.deducted = true; d.dispatchedAt = clock(); d.cogs = cogs;
+    const dy = day(d.wh); dy.cogs += cogs; dy.dsp += shipped.reduce((a, l) => a + l.qty, 0);
     const allDone = so.lines.every(l => l.fulfilled >= l.qty);
     so.status = allDone ? (d.method === 'Collection' ? 'Completed' : 'Dispatched') : 'Partially Fulfilled';
-    if (so.terms === 'Cash' && d.method === 'Collection') { const p = { id: nextRef('PAY'), customer: so.customer, date: TODAY, amount: total, method: 'Cash', extRef: '', by: st.currentUser, alloc: [{ inv: inv.id, amount: total }], status: 'Recorded', notes: 'Cash collected at handover — pending finance verification.' }; st.payments.unshift(p); inv.paid = total; }
+    // Invoicing follows Settings: auto-invoice on dispatch, or (always) cash collected at the counter. Otherwise the order is invoiced separately.
+    const inv = C.onDispatch(so, d, shipped); if (inv) { d.invoice = inv.id; inv.cogs = cogs; }
     return null;
   };
   A.dispatchHandover = (id, data) => {
@@ -498,43 +468,25 @@ export function createSoapStore() {
     d.lines.forEach((l, i) => l.handed = data.handed[i]);
     const e = deduct(d); if (e) return fail(e);
     d.status = 'Completed'; d.collector = data.collector; d.collectorId = data.collectorId || ''; log('Completed collection', id, d.so + ' · ' + data.collector); emit();
-    return ok('Stock deducted, invoice ' + d.invoice + ' raised. Collection note ready to print.', id);
+    return ok('Stock deducted' + (d.invoice ? ', invoice ' + d.invoice + ' raised' : '') + '. Collection note ready to print.', id);
   };
   A.dispatchAssign = (id, driver, vehicle) => { if (!can('dsp.process')) return deny(); const d = st.dispatches.find(x => x.id === id); if (!driver) return fail('Select a delivery officer.'); d.driver = driver; d.vehicle = vehicle; d.status = 'Assigned'; log('Assigned delivery officer', id, uname(driver)); emit(); return ok('Assigned to ' + uname(driver) + '.', id); };
-  A.dispatchOut = id => { if (!can('dsp.process')) return deny(); const d = st.dispatches.find(x => x.id === id); if (d.deducted) return fail('Already dispatched — duplicate blocked.'); const e = deduct(d); if (e) return fail(e); d.status = 'Out for delivery'; log('Dispatched from warehouse', id, d.so); emit(); return ok('Left warehouse. Stock deducted once; invoice ' + d.invoice + ' raised.', id); };
+  A.dispatchOut = id => { if (!can('dsp.process')) return deny(); const d = st.dispatches.find(x => x.id === id); if (d.deducted) return fail('Already dispatched — duplicate blocked.'); const e = deduct(d); if (e) return fail(e); d.status = 'Out for delivery'; log('Dispatched from warehouse', id, d.so); emit(); return ok('Left warehouse. Stock deducted once' + (d.invoice ? '; invoice ' + d.invoice + ' raised.' : '. Invoice the order from its sales order.'), id); };
   A.dispatchDeliver = (id, data) => {
     if (!can('dsp.deliver') && !can('dsp.process')) return deny(); const d = st.dispatches.find(x => x.id === id); const so = st.salesOrders.find(s => s.id === d.so);
     if (d.status !== 'Out for delivery') return fail('This delivery is not out for delivery.');
     if (data.outcome !== 'Failed' && !data.recipient) return fail('Recipient name is required.');
-    let credit = 0;
-    d.lines.forEach((l, i) => { const del = data.outcome === 'Delivered' ? l.dispatched : data.outcome === 'Failed' ? 0 : Math.min(l.dispatched, data.delivered[i] || 0); l.delivered = del; const ret = l.dispatched - del; if (ret > 0) { bal(d.wh, l.sku).quarantined += ret; move('Delivery return', d.wh, l.sku, ret, 'quarantined', l.cost4, id); const sl = so.lines.find(x => x.sku === l.sku); sl.returned += ret; sl.fulfilled -= ret; credit += ret * sl.price - Math.round(ret * sl.price * sl.discPct / 100); } });
+    for (let i = 0; i < d.lines.length; i++) { const v = data.outcome === 'Partially delivered' ? Number(data.delivered[i]) || 0 : 0; if (v < 0 || v > d.lines[i].dispatched) return fail(`${d.lines[i].sku}: delivered must be between zero and the ${qty(d.lines[i].sku, d.lines[i].dispatched)} dispatched.`); }
+    const rets = [];
+    d.lines.forEach((l, i) => { const del = data.outcome === 'Delivered' ? l.dispatched : data.outcome === 'Failed' ? 0 : Math.min(l.dispatched, data.delivered[i] || 0); l.delivered = del; const ret = l.dispatched - del; if (ret > 0) { bal(d.wh, l.sku).quarantined += ret; move('Delivery return', d.wh, l.sku, ret, 'quarantined', l.cost4, id); const sl = so.lines.find(x => x.sku === l.sku); sl.returned += ret; sl.fulfilled -= ret; rets.push({ sku: l.sku, qty: ret, cost4: l.cost4 }); } });
     d.status = data.outcome === 'Delivered' ? 'Delivered' : data.outcome === 'Failed' ? 'Failed' : 'Partially delivered';
     d.recipient = data.recipient || ''; d.deliveredAt = clock(); d.pod = data.pod || ''; d.outcomeNote = data.note || '';
-    if (credit > 0) { const inv = st.invoices.find(i => i.id === d.invoice); const cn = { id: nextRef('CN'), inv: inv.id, customer: inv.customer, date: TODAY, amount: credit, reason: 'Returned on delivery ' + id, by: st.currentUser }; st.creditNotes.unshift(cn); inv.credited += credit; day(d.wh).rev -= credit; }
+    const back = rets.length ? C.onDeliveryReturn(d, so, rets) : null;
     so.status = d.status === 'Delivered' && so.lines.every(l => l.fulfilled >= l.qty) ? 'Delivered' : 'Partially Fulfilled';
-    log('Recorded delivery outcome', id, d.status + (credit ? ' · credit ' + money(credit) : '')); emit();
-    return ok(d.status === 'Delivered' ? 'Delivery confirmed.' : 'Returned goods moved to quarantine for inspection; credit note raised automatically.', id);
+    log('Recorded delivery outcome', id, d.status + (back ? ' · return ' + back.rtn.id : '') + (back && back.credit ? ' · credit ' + money(back.credit) : '')); emit();
+    return ok(d.status === 'Delivered' ? 'Delivery confirmed.' : 'Returned goods held in quarantine — return ' + back.rtn.id + ' awaits inspection before stock is restored' + (back.credit ? '; credit note raised on the dispatch invoice.' : '. The undelivered quantity stays open on the order.'), id);
   };
 
-  A.paymentRecord = d => {
-    if (!can('fin.record')) return deny();
-    const errs = {};
-    if (!d.customer) errs.customer = 'Select a customer.';
-    if (!(d.amount > 0)) errs.amount = 'Enter an amount greater than zero.';
-    if (!d.method) errs.method = 'Select a method.';
-    if (d.method !== 'Cash' && !d.extRef) errs.extRef = 'External reference is required for non-cash payments.';
-    if (d.extRef && st.payments.some(p => p.extRef && p.extRef.toLowerCase() === d.extRef.toLowerCase() && p.status !== 'Reversed')) errs.extRef = 'This reference is already recorded (' + st.payments.find(p => p.extRef.toLowerCase() === d.extRef.toLowerCase()).id + '). Duplicate payments are blocked.';
-    const allocSum = d.alloc.reduce((a, x) => a + x.amount, 0);
-    if (allocSum > d.amount) errs.alloc = 'Allocated total exceeds the payment amount.';
-    d.alloc.forEach(x => { const i = st.invoices.find(v => v.id === x.inv); if (x.amount > invBal(i)) errs.alloc = `Allocation to ${i.id} exceeds its balance (${money(invBal(i))}).`; });
-    if (Object.keys(errs).length) return { ok: false, error: 'Please fix the highlighted fields.', errs };
-    const p = { id: nextRef('PAY'), customer: d.customer, date: d.date || TODAY, amount: d.amount, method: d.method, extRef: d.extRef || '', by: st.currentUser, alloc: d.alloc.filter(x => x.amount > 0), status: 'Recorded', notes: d.notes || '', evidence: d.evidence || '', unallocated: d.amount - allocSum };
-    p.alloc.forEach(x => { st.invoices.find(v => v.id === x.inv).paid += x.amount; });
-    st.payments.unshift(p); log('Recorded customer payment', p.id, money(p.amount) + ' · ' + p.method + ' · ' + p.alloc.length + ' invoice(s)'); emit();
-    return ok('Payment recorded — status Recorded until verified against bank/MoMo statements.', p.id, { id: p.id });
-  };
-  A.paymentAct = (id, action, reason) => { const p = st.payments.find(x => x.id === id); if (!can('fin.verify')) return deny(); if (action === 'verify') { if (p.status !== 'Recorded') return fail('Only recorded payments can be verified.'); p.status = 'Verified'; p.verifiedBy = st.currentUser; log('Verified payment', id, 'Matched to statement'); } else { if (p.status === 'Reversed') return fail('Already reversed.'); p.alloc.forEach(x => { st.invoices.find(v => v.id === x.inv).paid -= x.amount; }); p.status = 'Reversed'; p.reversal = reason; log('Reversed payment', id, reason); } emit(); return ok(action === 'verify' ? 'Payment verified.' : 'Payment reversed; invoice balances restored. Original record retained.', id); };
-  A.creditNote = (invId, amount, reason) => { if (!can('fin.verify')) return deny(); const inv = st.invoices.find(i => i.id === invId); if (!(amount > 0) || amount > invBal(inv)) return fail('Credit amount must be between 0 and the invoice balance.'); if (!reason) return fail('A reason is required.'); const cn = { id: nextRef('CN'), inv: invId, customer: inv.customer, date: TODAY, amount, reason, by: st.currentUser }; st.creditNotes.unshift(cn); inv.credited += amount; day(inv.wh).rev -= amount; log('Issued credit note', cn.id, invId + ' · ' + money(amount)); emit(); return ok('Credit note issued.', cn.id); };
   A.supplierPayment = d => { if (!can('fin.record')) return deny(); if (!d.supplier || !(d.amount > 0) || !d.ref) return fail('Supplier, amount and payment reference are required.'); if (st.supplierPayments.some(p => p.ref.toLowerCase() === d.ref.toLowerCase())) return fail('Duplicate payment reference.'); const s = st.supplierInvoices.filter(i => i.supplier === d.supplier && i.total > i.paid).sort((a, b) => a.due < b.due ? -1 : 1); let left = d.amount; const alloc = []; s.forEach(i => { if (left <= 0) return; const t = Math.min(left, i.total - i.paid); i.paid += t; left -= t; alloc.push({ inv: i.id, amount: t }); }); const p = { id: nextRef('SPAY'), supplier: d.supplier, date: TODAY, amount: d.amount, method: d.method, ref: d.ref, alloc, by: st.currentUser }; st.supplierPayments.unshift(p); log('Recorded supplier payment', p.id, money(d.amount)); emit(); return ok('Supplier payment recorded and allocated oldest-first.', p.id); };
 
   A.expenseSave = d => { if (!can('exp.create')) return deny(); const errs = {}; if (!d.date) errs.date = 'Required.'; if (!d.category) errs.category = 'Select a category.'; if (!(d.amount > 0)) errs.amount = 'Enter an amount.'; if (!d.description) errs.description = 'Describe the expense.'; if (!d.wh) errs.wh = 'Select a warehouse.'; if (Object.keys(errs).length) return { ok: false, error: 'Please fix the highlighted fields.', errs }; const e = Object.assign({ id: nextRef('EXP'), status: 'Pending Approval', by: st.currentUser }, d); st.expenses.unshift(e); log('Recorded expense', e.id, money(e.amount) + ' · ' + e.category); emit(); return ok('Expense submitted for approval.', e.id); };
@@ -580,7 +532,22 @@ export function createSoapStore() {
   };
   A.userSave = (id, patch) => { if (!can('usr.manage')) return deny(); const u = st.users.find(x => x.id === id); if (patch.wh && !patch.wh.length) return fail('Assign at least one warehouse.'); if (id === st.currentUser && patch.status === 'Suspended') return fail('You cannot suspend your own account.'); Object.assign(u, patch); log('Updated user', u.name, JSON.stringify(patch).replace(/["{}]/g, '')); emit(); return ok('User updated. Changes apply at next sign-in (enforced by backend).', u.name); };
   A.userCreate = d => { if (!can('usr.manage')) return deny(); if (!d.name || !d.email || !d.role) return fail('Name, email and role are required.'); if (st.users.some(u => u.email === d.email)) return fail('Email already in use.'); const u = { id: 'u' + (st.users.length + 1 + Math.floor(Math.random() * 1000)), name: d.name, email: d.email, role: d.role, wh: d.wh.length ? d.wh : ['TMA'], status: 'Invited', last: '—' }; st.users.push(u); log('Invited user', u.name, ROLES[u.role].name); emit(); return ok('Invitation queued (simulated).', u.name); };
-  A.settingsSave = patch => { if (!can('set.manage')) return deny(); Object.assign(st.settings, patch); log('Updated settings', 'SETTINGS', Object.keys(patch).join(', ')); emit(); return ok('Settings saved.', 'SETTINGS'); };
+  const settingsError = p => {
+    const has = k => Object.prototype.hasOwnProperty.call(p, k);
+    const isBool = k => typeof p[k] === 'boolean';
+    if (has('expiryWarnDays') && !(Number.isInteger(p.expiryWarnDays) && p.expiryWarnDays >= 1 && p.expiryWarnDays <= 365)) return 'Expiry warning must be 1–365 days.';
+    if (has('maxDiscountPct') && !(typeof p.maxDiscountPct === 'number' && p.maxDiscountPct >= 0 && p.maxDiscountPct <= 50)) return 'Max discount must be between 0 and 50%.';
+    if (has('invoiceBasis') && !['ordered', 'delivered'].includes(p.invoiceBasis)) return 'Invoice basis must be "ordered" or "delivered".';
+    for (const k of ['autoInvoiceOnDispatch', 'allowBackorders', 'creditCheck', 'blindCountDefault']) if (has(k) && !isBool(k)) return k + ' must be on or off.';
+    if (has('allowNegative') && p.allowNegative !== false) return 'Negative sellable stock is prohibited by policy.';
+    if (has('estimateValidityDays') && !(Number.isInteger(p.estimateValidityDays) && p.estimateValidityDays >= 1 && p.estimateValidityDays <= 365)) return 'Estimate validity must be 1–365 days.';
+    if (has('defaultTax') && !st.taxes.some(t => t.id === p.defaultTax && t.status === 'Active')) return 'Default tax must be an active tax rate.';
+    if (has('paymentMethods') && (!Array.isArray(p.paymentMethods) || !['Cash', 'Bank transfer', 'Mobile money'].every(m => p.paymentMethods.includes(m)) || new Set(p.paymentMethods).size !== p.paymentMethods.length)) return 'Payment methods must keep Cash, Bank transfer and Mobile money, without duplicates.';
+    if (has('company') && !String(p.company || '').trim()) return 'Company name is required on documents.';
+    if (has('companyEmail') && p.companyEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.companyEmail)) return 'Company email is not valid.';
+    return null;
+  };
+  A.settingsSave = patch => { if (!can('set.manage')) return deny(); const e = settingsError(patch); if (e) return fail(e); Object.assign(st.settings, patch); log('Updated settings', 'SETTINGS', Object.keys(patch).join(', ')); emit(); return ok('Settings saved.', 'SETTINGS'); };
 
   // ---------- derived views
   const D = {};
@@ -594,7 +561,9 @@ export function createSoapStore() {
     st.pos.filter(p => p.status === 'Pending Approval').forEach(p => add('po.approve', 'Purchase order', p.id, sup(p.supplier).name, money(poTotals(p).total), { name: 'purchase-orders', id: p.id }));
     st.salesOrders.filter(s => s.status === 'Pending Approval').forEach(s => add('so.approve', 'Sales order', s.id, cust(s.customer).name, s.approvalReason || '', { name: 'sales-orders', id: s.id }, s.wh));
     st.expenses.filter(e => e.status === 'Pending Approval').forEach(e => add('exp.approve', 'Expense', e.id, e.description, money(e.amount) + ' · ' + e.category, { name: 'expenses', id: e.id }, e.wh));
-    st.payments.filter(p => p.status === 'Recorded').forEach(p => add('fin.verify', 'Payment', p.id, 'Verify ' + money(p.amount) + ' from ' + cust(p.customer).name, p.method + (p.extRef ? ' · ' + p.extRef : ''), { name: 'finance', tab: 'payments', id: p.id }));
+    st.payments.filter(p => p.status === 'Recorded').forEach(p => add('fin.verify', 'Payment', p.id, 'Verify ' + money(p.amount) + ' from ' + cust(p.customer).name, p.method + (p.extRef ? ' · ' + p.extRef : ''), { name: 'payments', id: p.id }));
+    st.invoices.filter(i => i.status === 'Draft').forEach(i => add('sinv.issue', 'Invoice', i.id, 'Issue draft invoice for ' + cust(i.customer).name, money(i.total) + (i.so ? ' · ' + i.so : ' · direct'), { name: 'invoices', id: i.id }, i.wh));
+    st.returns.filter(r => r.status === 'Pending inspection').forEach(r => add('rtn.inspect', 'Customer return', r.id, 'Inspect returned goods from ' + cust(r.customer).name, wh(r.wh).name + ' · ' + r.source.toLowerCase() + ' ' + r.ref, { name: 'dispatch', tab: 'returns', id: r.id }, r.wh));
     return out; };
   D.exceptions = () => { const out = []; st.receipts.filter(r => inScope(r.wh) && diffDays(TODAY, r.arrival.slice(0, 10)) <= 10 && r.status !== 'Rejected').forEach(r => { const s = r.lines.reduce((a, l) => a + Math.max(0, l.expected - l.counted), 0), d = r.lines.reduce((a, l) => a + l.damaged + l.rejected, 0); if (r.lines.some(l => l.counted > 0) && (s || d)) out.push({ kind: 'Receiving', ref: r.id, text: `${sup(r.supplier).name}: ${s ? 'short ' + s.toLocaleString() + ' bars' : ''}${s && d ? ', ' : ''}${d ? d.toLocaleString() + ' bars damaged/rejected' : ''}`, route: { name: 'receiving', id: r.id } }); });
     st.transfers.filter(t => t.status === 'Disputed' && (inScope(t.from) || inScope(t.to))).forEach(t => out.push({ kind: 'Transfer', ref: t.id, text: t.note || 'Quantity discrepancy on receipt', route: { name: 'transfers', id: t.id } }));
@@ -608,8 +577,11 @@ export function createSoapStore() {
     st.pos.forEach(p => { if ((p.id + ' ' + sup(p.supplier).name).toLowerCase().includes(q)) push('Purchase order', p.id, sup(p.supplier).name, p.status, { name: 'purchase-orders', id: p.id }); });
     st.receipts.forEach(r => { if ((r.id + ' ' + r.truck + ' ' + r.dn).toLowerCase().includes(q)) push('Receipt', r.id, sup(r.supplier).name, r.truck + ' · ' + r.status, { name: 'receiving', id: r.id }); });
     st.transfers.forEach(t => { if (t.id.toLowerCase().includes(q)) push('Transfer', t.id, wh(t.from).name + ' → ' + wh(t.to).name, t.status, { name: 'transfers', id: t.id }); });
-    st.invoices.forEach(i => { if (i.id.toLowerCase().includes(q)) push('Invoice', i.id, cust(i.customer).name, invStatus(i), { name: 'finance', id: i.id }); });
-    st.customers.forEach(c => { if (c.name.toLowerCase().includes(q)) push('Customer', c.id, c.name, c.type, { name: 'customers', id: c.id }); });
+    st.estimates.forEach(e => { if ((e.id + ' ' + cust(e.customer).name).toLowerCase().includes(q)) push('Estimate', e.id, cust(e.customer).name, C.estStatus(e), { name: 'estimates', id: e.id }); });
+    st.invoices.forEach(i => { if ((i.id + ' ' + (i.ref || '')).toLowerCase().includes(q)) push('Invoice', i.id, cust(i.customer).name, invStatus(i), { name: 'invoices', id: i.id }); });
+    st.payments.forEach(p => { if ((p.id + ' ' + p.rct + ' ' + (p.extRef || '')).toLowerCase().includes(q)) push('Payment', p.id, cust(p.customer).name, money(p.amount) + ' · ' + p.status, { name: 'payments', id: p.id }); });
+    st.creditNotes.forEach(n => { if (n.id.toLowerCase().includes(q)) push('Credit note', n.id, cust(n.customer).name, n.type + ' · ' + n.inv, { name: 'credit-notes', id: n.id }); });
+    st.customers.forEach(c => { if ((c.id + ' ' + c.name).toLowerCase().includes(q)) push('Customer', c.id, c.name, c.type, { name: 'customers', id: c.id }); });
     st.dispatches.forEach(d => { if (d.id.toLowerCase().includes(q)) push('Dispatch', d.id, d.so, d.status, { name: 'dispatch', id: d.id }); });
     return out; };
   D.paginate = (rows, page, size) => { const pages = Math.max(1, Math.ceil(rows.length / size)); const p = Math.min(Math.max(1, page), pages); return { rows: rows.slice((p - 1) * size, p * size), page: p, pages, total: rows.length, label: rows.length ? `${(p - 1) * size + 1}–${Math.min(p * size, rows.length)} of ${rows.length}` : '0 results', hasPrev: p > 1, hasNext: p < pages }; };
@@ -619,6 +591,6 @@ export function createSoapStore() {
   return Object.assign({
     get s() { return st; }, get version() { return version; }, hooks, ui, TODAY, ROLES, PERMS, PERM_LABELS, WH, STATUS_TONE, subscribe: f => { listeners.add(f); return () => listeners.delete(f); }, emit,
     prod, bpc, wh, cust, sup, user, uname, role, can, canView, allowedWh, hasAllWh, scope, inScope, money, moneyShort, cost, valueOf, qty, toBars, fmtDate, badge, tones: TONES, commas, addDays, diffDays,
-    bal, avail, invStatus, invBal, custBalance, soTotal, poTotals, poReceived, poInvoiced, poDelivery, sinvMatch, expiredSellable,
-  }, A, D);
+    bal, avail, poTotals, poReceived, poInvoiced, poDelivery, sinvMatch, expiredSellable,
+  }, C.api, A, D);
 }
